@@ -2,7 +2,7 @@ import ApolloClient from "apollo-client";
 import { InMemoryCache } from "apollo-cache-inmemory";
 import * as AbsintheSocket from "@absinthe/socket";
 import { createAbsintheSocketLink } from "@absinthe/socket-apollo-link";
-import { Socket as PhoenixSocket } from "phoenix";
+import { Socket as PhoenixSocket, LongPoll } from "phoenix";
 import { createHttpLink } from "apollo-link-http";
 import { hasSubscription } from "@jumpn/utils-graphql";
 import { split } from "apollo-link";
@@ -19,22 +19,35 @@ const WS_URI =
     ? "wss://brisk-hospitable-indianelephant.gigalixirapp.com/socket"
     : "ws://localhost:4000/socket";
 
+// Socket with full fallback to LongPoll
+// via https://elixirforum.com/t/fall-back-to-longpoll-when-websocket-fails/23894
+const socket = new PhoenixSocket(WS_URI, {
+  params: () => {
+    if (Cookies.get("token")) {
+      return { token: Cookies.get("token") };
+    } else {
+      return {};
+    }
+  },
+});
+socket.onError(() => {
+  if (navigator.onLine) {
+    console.error(
+      `Error connecting using ${
+        socket.transport == window.WebSocket ? "WebSocket" : "LongPoll"
+      }`,
+    );
+    if (socket.transport == window.WebSocket) socket.transport = LongPoll;
+    else if (window.WebSocket) socket.transport = window.WebSocket;
+  }
+});
+
 export const createClient = ({ ssr, req, fetch, tokenCookie } = {}) => {
   let link = createHttpLink({ uri: HTTP_URI, fetch });
   let absintheSocket;
 
   if (!ssr) {
-    absintheSocket = AbsintheSocket.create(
-      new PhoenixSocket(WS_URI, {
-        params: () => {
-          if (Cookies.get("token")) {
-            return { token: Cookies.get("token") };
-          } else {
-            return {};
-          }
-        },
-      }),
-    );
+    absintheSocket = AbsintheSocket.create(socket);
     const socketLink = createAbsintheSocketLink(absintheSocket);
 
     link = split(
