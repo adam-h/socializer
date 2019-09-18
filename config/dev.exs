@@ -48,7 +48,11 @@ config :phoenix, :stacktrace_depth, 20
 config :phoenix, :plug_init_mode, :runtime
 
 # Configure your database
+# Start with: `docker run --name posttest -d -p 5432:5432 -e POSTGRES_PASSWORD=mylocalpassword postgres:alpine`
+# Stop with: `docker rm posttest --force`
 config :socializer, Socializer.Repo,
   database: "socializer_dev",
   hostname: "localhost",
+  username: "postgres",
+  password: "mylocalpassword",
   pool_size: 10
